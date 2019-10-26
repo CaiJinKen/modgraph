@@ -10,7 +10,7 @@ import (
 )
 
 func main() {
-	bts := getByts()
+	bts := getDependencyByts()
 	if len(bts) == 0 {
 		fmt.Println("go.mod is empty.")
 		os.Exit(0)
@@ -40,7 +40,7 @@ func main() {
 	rootMod.String("", 0)
 }
 
-func getByts() []byte {
+func getDependencyByts() []byte {
 	buf := bytes.NewBuffer(nil)
 	cmd := exec.Command("go", "mod", "graph")
 	cmd.Stderr = os.Stderr
@@ -67,10 +67,9 @@ func getProjectName() string {
 }
 
 type mod struct {
-	Name   []byte
-	Mods   []*mod
-	n      int
-	traved bool
+	Name     []byte
+	Mods     []*mod
+	traveled bool
 }
 
 func (m *mod) String(str string, n int) {
@@ -84,11 +83,11 @@ func (m *mod) String(str string, n int) {
 	} else {
 		fmt.Printf(str+"--%s\n", string(m.Name))
 	}
-	if len(m.Mods) == 0 || m.traved {
+	if len(m.Mods) == 0 || m.traveled {
 		return
 	}
 
-	m.traved = true
+	m.traveled = true
 	for _, v := range m.Mods {
 		v.String(str+ft, n+1)
 	}
