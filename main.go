@@ -9,42 +9,45 @@ import (
 	"os/exec"
 )
 
+var modName = ""
+
+const _ModFile = "go.mod"
+
 func main() {
-	bts := getDependencyByts()
-	if len(bts) == 0 {
+	dependencies := getDependenciesByte()
+	if len(dependencies) == 0 {
 		fmt.Println("go.mod is empty.")
 		os.Exit(0)
 	}
 
 	rootMod := &mod{Name: []byte(getProjectName())}
-	maps := make(map[string]*mod)
-	maps[getProjectName()] = rootMod
+	nameModMaps := make(map[string]*mod)
+	nameModMaps[getProjectName()] = rootMod
 
-	btsls := bytes.Split(bts, []byte{'\n'})
-	for _, lv := range btsls {
-		mods := bytes.Split(bytes.TrimSpace(lv), []byte{' '})
-		if len(mods) < 2 {
+	lines := bytes.Split(dependencies, []byte{'\n'})
+	for _, line := range lines {
+		deps := bytes.Split(bytes.TrimSpace(line), []byte{' '})
+		if len(deps) < 2 {
 			continue
 		}
-		m1, m2 := mods[0], mods[1]
-		m1str, m2str := string(m1), string(m2)
-		if m := maps[m1str]; m == nil {
-			maps[m1str] = &mod{Name: m1}
+		dep1, dep2 := deps[0], deps[1]
+		dep1Str, dep2Str := string(dep1), string(dep2)
+		if m := nameModMaps[dep1Str]; m == nil {
+			nameModMaps[dep1Str] = &mod{Name: dep1}
 		}
-		if m := maps[m2str]; m == nil {
-			maps[m2str] = &mod{Name: m2}
+		if m := nameModMaps[dep2Str]; m == nil {
+			nameModMaps[dep2Str] = &mod{Name: dep2}
 		}
 
-		maps[m1str].Mods = append(maps[m1str].Mods, maps[m2str])
+		nameModMaps[dep1Str].Mods = append(nameModMaps[dep1Str].Mods, nameModMaps[dep2Str])
 	}
 	rootMod.String("", 0)
 }
 
-func getDependencyByts() []byte {
+func getDependenciesByte() []byte {
 	buf := bytes.NewBuffer(nil)
 	cmd := exec.Command("go", "mod", "graph")
 	cmd.Stderr = os.Stderr
-	cmd.Stdin = os.Stdin
 	cmd.Stdout = bufio.NewWriter(buf)
 	if err := cmd.Run(); err != nil {
 		fmt.Println("get the project dependencies err:", err.Error())
@@ -54,16 +57,34 @@ func getDependencyByts() []byte {
 }
 
 func getProjectName() string {
-	bts, err := ioutil.ReadFile("go.mod")
-	if err != nil {
-		fmt.Println("read file go.mod with err:", err.Error())
+	if modName != "" {
+		return modName
+	}
+
+	lines := getModFileContent()
+	if len(lines) == 0 || len(lines[0]) <= 7 {
 		return ""
 	}
-	bts = bytes.TrimSpace(bts)
-	if i := bytes.IndexByte(bts, '\n'); i > 7 {
-		bts = bts[7:i]
+	modName = string(lines[0][7:])
+	return modName
+}
+
+func getModFileContent() (content [][]byte) {
+	modFileContent, err := ioutil.ReadFile(_ModFile)
+	if err != nil {
+		fmt.Println("read file go.mod with err:", err.Error())
+		return
 	}
-	return string(bts)
+
+	lines := bytes.Split(modFileContent, []byte{'\n'})
+	for _, line := range lines {
+		line = bytes.TrimSpace(line)
+		if len(line) < 2 || bytes.HasPrefix(line, []byte("go ")) || bytes.HasSuffix(line, []byte(")")) || bytes.HasSuffix(line, []byte("require ")) {
+			continue
+		}
+		content = append(content, line)
+	}
+	return
 }
 
 type mod struct {
